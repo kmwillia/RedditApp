@@ -3,7 +3,7 @@ import { StackNavigator } from 'react-navigation';
 import Home from './src/Home';
 
 const Navigator = StackNavigator({
-  Home: { screen: Home }
+  Home: { screen: Home },
 });
 
 export default class App extends Component {

@@ -1,33 +1,56 @@
-import React, { Component } from 'react';
+import React, { Component, PureComponent } from 'react';
 import {
   StyleSheet,
   View,
   FlatList,
   Text,
   Image,
+  Button,
   TouchableOpacity,
+  InteractionManager,
 } from 'react-native';
 import { StackNavigator } from 'react-navigation';
 import upIcon from '../icons/arrow_up.png';
 import commentIcon from '../icons/comment.png';
 
-class List extends Component {
+
+export default class Home extends Component {
   static navigationOptions = ({ navigation, screenProps }) => {
+    params = navigation.state.params;
     return {
-      title: navigation.state.params.list
+      title: params && params.list || '',
+    };
+  };
+
+  state = { list: 'hot' };
+
+  render() {
+    return (
+      <View style={{flex: 1}}>
+        <Button onPress={this._onPress.bind(this)} title={this.state.list} />
+        <List list={this.state.list} />
+      </View>
+    );
+  }
+
+  _onPress() {
+    let list;
+    switch(this.state.list) {
+       case 'hot': list = 'new'; break;
+       case 'new': list = 'rising'; break;
+       case 'rising': list = 'controversial'; break;
+       case 'controversial': list = 'top'; break;
+       default: list = 'hot'; break;
     }
-  };
+    this.setState({ list });
+  }
+}
 
-  state = {
-    threads: [],
-    after: undefined,
-  };
 
-  styles = StyleSheet.create({
+class List extends Component {
+  static styles = StyleSheet.create({
     container: {
       flex: 1,
-      paddingLeft: 16,
-      paddingRight: 16,
     },
     toTop: {
       justifyContent: 'center',
@@ -43,36 +66,45 @@ class List extends Component {
       borderWidth: 1,
       backgroundColor: '#ababab',
     },
-    toTopText: {
-      position: 'relative',
-      fontSize: 20,
-      top: 4,
-      backgroundColor: 'transparent',
-    }
   });
 
-  // componentWillReceiveProps(newProps) {
-  //   if(newProps.navigation.state.routeName !== this.props.navigation.state.routeName) {
-  //     this._fetchList(newProps.navigation.state.params.list);
-  //   }
-  // }
+  state = {
+    threads: [],
+    threadIDs: {},
+    after: undefined,
+    fetching: false,
+  };
+
+  componentWillMount() {
+    this._fetchThreads();
+  }
+
+  componentWillReceiveProps(newProps) {
+    if(newProps.list !== this.props.list) {
+      this.setState({
+        threads: [],
+        threadIDs: {},
+        after: undefined,
+        fetching: false,
+      });
+      this._fetchThreads();
+    }
+  }
 
   render() {
     return (
       <View style={{ flex :1 }}>
         <FlatList
           ref={ref => this.list = ref}
-          style={this.styles.container}
+          style={List.styles.container}
           data={this.state.threads}
           onEndReached={this._fetchThreads.bind(this)}
           keyExtractor={(item, index) => item.data && item.data.name}
           renderItem={({ item }) => <ListItem item={item} />}
           ItemSeparatorComponent={ListItemSeparator}
-          ListHeaderComponent={ListItemSeparator}
-          ListFooterComponent={ListItemSeparator}
         />
         <TouchableOpacity onPress={this._scrollToTop.bind(this)}>
-          <View style={this.styles.toTop}>
+          <View style={List.styles.toTop}>
             <Image source={upIcon} />
           </View>
         </TouchableOpacity>
@@ -84,15 +116,22 @@ class List extends Component {
     if(!this.state.fetching) {
       this.setState({ fetching: true, });
       const url = 'https://www.reddit.com/' +
-        `${this.props.navigation.state.params.list}.json?raw_json=1` +
+        `${this.props.list}.json?raw_json=1` +
         (this.state.after ? `&after=${this.state.after}` : '');
-      console.log(url);
       fetch(url)
       .then(response => response.json())
       .then(json => {
-        console.log(json);
+        let threadIDs = this.state.threadIDs;
+        const newThreads = json.data.children.filter(item => {
+          if(threadIDs[item.data.name]) {
+            return false;
+          }
+          threadIDs[item.data.name] = true;
+          return true;
+        });
         this.setState({
-          threads: this.state.threads.concat(json.data.children),
+          threads: this.state.threads.concat(newThreads),
+          threadIDs: threadIDs,
           after: json.data.after,
           fetching: false,
         });
@@ -107,71 +146,85 @@ class List extends Component {
 }
 
 
-const ListsNavigator = StackNavigator({
-  hot: { screen: List },
-  new: { screen: List },
-  rising: { screen: List },
-  controversial: { screen: List },
-  top: { screen: List }
-}, {
-  headerMode: 'none',
-  initialRouteParams: {
-    list: 'hot'
-  }
-})
-export default ListsNavigator;
+// const ListsNavigator = StackNavigator({
+//   hot: { screen: List },
+//   new: { screen: List },
+//   rising: { screen: List },
+//   controversial: { screen: List },
+//   top: { screen: List }
+// }, {
+//   headerMode: 'none',
+//   initialRouteParams: {
+//     list: 'hot'
+//   }
+// })
+// export default ListsNavigator;
 
 
-class ListItem extends Component {
-  styles = StyleSheet.create({
+  //////////////////////////////////////////////////
+  //  IMAGE Title should go here and will wrap if //
+  //  IMAGE necessary (domain)                    //
+  //  IMAGE                                       //
+  //                                              //
+  //  User                                  Score //
+  //  Comment Count                     Subreddit //
+  //////////////////////////////////////////////////
+class ListItem extends PureComponent {
+  static styles = StyleSheet.create({
     card: {
-      flexDirection: 'row',
-      padding: 8,
+      minHeight: 76,
+      paddingTop: 8,
+      paddingBottom: 8,
+      paddingLeft: 16,
+      paddingRight: 16,
       backgroundColor: '#e3e3e3',
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: '#757575',
-      borderRadius: 5,
+      borderColor: '#cdcdcd',
     },
-    leftBlock: {
-    },
-    centerBlock: {
-      flex: 1,
-    },
-    rightBlock: {
-      flexDirection: 'column',
-    },
-    titleText: {
-      fontSize: 16,
-    },
-    byline: {
-      flex: 1,
+    row: {
       flexDirection: 'row',
       justifyContent: 'space-between',
     },
-    bylineText: {
+    titleRow: {
+      flexDirection: 'row',
+    },
+    titleText: {
+      flex: 1,
+      fontSize: 16,
+    },
+    unimportantText: {
       fontSize: 12,
     },
   });
 
   render() {
     const { data } = this.props.item;
+    const image = data.preview && data.preview.enabled
+      ? <Image
+          source={{
+            uri: data.preview.images[0].resolutions[0].url,
+            width: 60,
+            height: 60,
+            resizeMode: 'cover'
+          }}
+          style={{ marginRight: 8 }} />
+      : null;
     return (
-      <View style={this.styles.card}>
-        <View style={this.styles.leftBlock}>
-          <Image src={null} />
-        </View>
-        <View style={this.styles.centerBlock}>
+      <View style={ListItem.styles.card}>
+        <View style={ListItem.styles.titleRow}>
+          {image}
           <View>
-            <Text style={this.styles.titleText}>{data.title}</Text>
-          </View>
-          <View style={this.styles.byline}>
-            <Text style={this.styles.bylineText}>{data.author}</Text>
-            <Text style={this.styles.bylineText}>{`r/${data.subreddit}`}</Text>
+            <Text style={ListItem.styles.titleText}>{data.title}</Text>
+            {data.domain ? <Text style={ListItem.styles.unimportantText}>{` - (${data.domain})`}</Text> : null}
           </View>
         </View>
-        <View style={this.styles.rightBlock}>
-          <Text>{data.score}</Text>
-          <Image source={commentIcon} />
+        <View style={ListItem.styles.row}>
+          <Text style={ListItem.styles.unimportantText}>{`u/${data.author}`}</Text>
+          <Text style={ListItem.styles.unimportantText}>{data.score}</Text>
+        </View>
+        <View style={ListItem.styles.row}>
+          <Text style={ListItem.styles.unimportantText}>{`${data.num_comments} comments`}</Text>
+          <Text style={ListItem.styles.unimportantText}>{data.subreddit_name_prefixed}</Text>
         </View>
       </View>
     );
@@ -181,6 +234,6 @@ class ListItem extends Component {
 
 class ListItemSeparator extends Component {
   render() {
-    return <View style={{ height: 16 }} />;
+    return <View style={{ height: 0, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#757575' }} />;
   }
 }
