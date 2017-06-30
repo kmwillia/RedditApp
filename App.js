@@ -4,6 +4,9 @@ import Home from './src/Home';
 
 const Navigator = StackNavigator({
   Home: { screen: Home },
+}, {
+  initialRouteName: 'Home',
+  initialRouteParams: { list: 'hot' },
 });
 
 export default class App extends Component {
